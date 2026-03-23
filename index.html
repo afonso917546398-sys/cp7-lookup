@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="pt" data-theme="dark">
+<head>
+<!--
+   ______                            __
+  / ____/___  ____ ___  ____  __  __/ /____  _____
+ / /   / __ \/ __ `__ \/ __ \/ / / / __/ _ \/ ___/
+/ /___/ /_/ / / / / / / /_/ / /_/ / /_/  __/ /
+\____/\____/_/ /_/ /_/ .___/\__,_/\__/\___/_/
+                    /_/
+        Created with Perplexity Computer
+        https://www.perplexity.ai/computer
+-->
+<meta name="generator" content="Perplexity Computer">
+<meta name="author" content="Perplexity Computer">
+<meta property="og:see_also" content="https://www.perplexity.ai/computer">
+<link rel="author" href="https://www.perplexity.ai/computer">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CP7 Lookup — CODU</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app">
+  <!-- Search Panel -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="logo">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-label="CP7 Lookup">
+          <rect x="2" y="2" width="24" height="24" rx="4" stroke="currentColor" stroke-width="2"/>
+          <circle cx="14" cy="14" r="5" stroke="#e74c3c" stroke-width="2"/>
+          <line x1="14" y1="3" x2="14" y2="8" stroke="#e74c3c" stroke-width="1.5"/>
+          <line x1="14" y1="20" x2="14" y2="25" stroke="#e74c3c" stroke-width="1.5"/>
+          <line x1="3" y1="14" x2="8" y2="14" stroke="#e74c3c" stroke-width="1.5"/>
+          <line x1="20" y1="14" x2="25" y2="14" stroke="#e74c3c" stroke-width="1.5"/>
+        </svg>
+        <div>
+          <h1>CP7 Lookup</h1>
+          <span class="subtitle">Localização por Código Postal</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="search-section">
+      <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Código postal, morada ou localidade..." autocomplete="off" autofocus>
+        <button id="clearBtn" class="clear-btn" title="Limpar">&times;</button>
+      </div>
+      <ul id="searchResults" class="results-list"></ul>
+    </div>
+
+    <!-- Result Card -->
+    <div id="resultCard" class="result-card hidden">
+      <div class="result-header">
+        <span id="resultCP" class="result-cp"></span>
+      </div>
+      <div class="result-name" id="resultName"></div>
+      <div class="result-details">
+        <div class="detail-row coords-row">
+          <span class="detail-label">Coordenadas</span>
+          <button id="copyBtn" class="coords-copy" title="Copiar coordenadas">
+            <span class="detail-value mono" id="resultCoords"></span>
+            <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M20 6L9 17l-5-5"/></svg>
+          </button>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Distrito</span>
+          <span class="detail-value" id="resultDistrito"></span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Concelho</span>
+          <span class="detail-value" id="resultConcelho"></span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Localidade</span>
+          <span class="detail-value" id="resultLocalidade"></span>
+        </div>
+      </div>
+      <div id="streetsSection" class="streets-section hidden">
+        <div class="streets-header">
+          <span class="detail-label">Ruas</span>
+          <span class="streets-count" id="streetsCount"></span>
+        </div>
+        <ul class="streets-list" id="resultStreets"></ul>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats" id="stats">
+      <span class="stat-item">197K CP7</span>
+      <span class="stat-item">37K lugares</span>
+      <span class="stat-item">283K ruas</span>
+      <span class="stat-item">offline</span>
+    </div>
+
+    <footer class="footer">
+      <a href="https://www.perplexity.ai/computer" target="_blank" rel="noopener noreferrer">Created with Perplexity Computer</a>
+      <span class="separator">·</span>
+      <span>Fonte: <a href="https://github.com/temospena/CP7" target="_blank" rel="noopener noreferrer">temospena/CP7</a></span>
+    </footer>
+  </div>
+
+  <!-- Map -->
+  <div id="map" class="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="postal_data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
