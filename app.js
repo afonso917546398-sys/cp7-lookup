@@ -215,114 +215,204 @@
     return results.slice(0, maxResults);
   }
 
-  // Main search
+  // Build searchable text for each entry (called once per entry type)
+  // Returns: { text: "NORMALIZED SEARCHABLE STRING", cp4: "1234" or null }
+  function buildSearchText(item) {
+    if (item.type === 'cp') {
+      return `${item.cp7} ${item.name} ${item.distrito} ${item.concelho} ${item.localidade}`;
+    } else if (item.type === 'place') {
+      return item.name;
+    } else if (item.type === 'street') {
+      return item.street;
+    }
+    return '';
+  }
+
+  // Multi-token scoring: each query token that matches adds to score
+  function scoreEntry(tokens, searchText, cp4Token) {
+    let score = 0;
+    for (const tok of tokens) {
+      if (searchText.includes(tok)) {
+        score += tok.length; // longer token matches = higher score
+      }
+    }
+    // Bonus for CP4 match
+    if (cp4Token && searchText.includes(cp4Token)) {
+      score += 10;
+    }
+    return score;
+  }
+
+  // Main search — unified multi-token across all databases
   function search(query) {
     ensureParsed();
     const q = query.trim();
     if (q.length < 2) { searchResults.innerHTML = ''; return; }
 
-    const results = [];
-
-    // Check if postal code pattern
-    const cpMatch = q.match(/^(\d{4})(?:[-\s]?(\d{0,3}))?$/);
-
-    if (cpMatch) {
-      const prefix = cpMatch[2] ? `${cpMatch[1]}-${cpMatch[2]}` : cpMatch[1];
+    // Check if pure postal code pattern (only digits + optional dash)
+    const pureCpMatch = q.match(/^(\d{4})(?:[-\s]?(\d{0,3}))?$/);
+    if (pureCpMatch) {
+      const results = [];
+      const prefix = pureCpMatch[2] ? `${pureCpMatch[1]}-${pureCpMatch[2]}` : pureCpMatch[1];
       for (let i = 0; i < postalEntries.length && results.length < 12; i++) {
         if (postalEntries[i].cp7.startsWith(prefix)) {
           results.push(postalEntries[i]);
         }
       }
-    } else {
-      // Text search with fuzzy fallback
-      // Support "street, locality" format
-      let qNorm = normalizeStr(q);
-      let localityFilter = null;
-      if (q.includes(',')) {
-        const parts = q.split(',').map(s => s.trim());
-        qNorm = normalizeStr(parts[0]);
-        localityFilter = normalizeStr(parts[1]);
-      }
-      const exact = [], starts = [], contains = [], fuzzyResults = [];
+      renderResults(results, 'cp');
+      return;
+    }
 
-      // Resolve locality filter to coordinates for proximity filtering
-      let filterLat = null, filterLon = null;
-      if (localityFilter) {
-        // Find the locality in places or CP names
-        const placeMatch = placesIndex?.get(localityFilter);
-        const cpMatch3 = textIndex?.get(localityFilter);
-        if (placeMatch) { filterLat = placeMatch[0].lat; filterLon = placeMatch[0].lon; }
-        else if (cpMatch3) { filterLat = cpMatch3[0].lat; filterLon = cpMatch3[0].lon; }
-      }
+    // Tokenize query: split by spaces, commas, hyphens
+    const rawTokens = q.replace(/[,;]/g, ' ').split(/\s+/).filter(t => t.length >= 2);
+    const tokens = rawTokens.map(t => normalizeStr(t));
+    if (tokens.length === 0) { searchResults.innerHTML = ''; return; }
 
-      function nearLocality(lat, lon) {
-        if (!filterLat) return true; // no filter
-        const dlat = lat - filterLat, dlon = lon - filterLon;
-        return (dlat*dlat + dlon*dlon) < 0.01; // ~10km radius
-      }
+    // Extract CP4 token if any (4 digits)
+    let cp4Token = null;
+    for (const t of rawTokens) {
+      const m = t.match(/^(\d{4})$/);
+      if (m) { cp4Token = m[1]; break; }
+    }
 
-      // Search places (OSM)
-      if (placesIndex) {
-        for (const [key, entries] of placesIndex) {
-          const e = entries[0];
-          if (!nearLocality(e.lat, e.lon)) continue;
-          if (key === qNorm) exact.push({ ...e, source: 'place' });
-          else if (key.startsWith(qNorm)) starts.push({ ...e, source: 'place' });
-          else if (contains.length < 10 && key.includes(qNorm)) contains.push({ ...e, source: 'place' });
-        }
-      }
+    const scored = []; // { item, score }
+    const MAX_CANDIDATES = 50;
 
-      // Search CP names
-      if (textIndex) {
-        for (const [key, entries] of textIndex) {
-          const e = entries[0];
-          if (!nearLocality(e.lat, e.lon)) continue;
-          if (key === qNorm) exact.push({ ...e, source: 'cp' });
-          else if (key.startsWith(qNorm)) starts.push({ ...e, source: 'cp' });
-          else if (contains.length < 10 && key.includes(qNorm)) contains.push({ ...e, source: 'cp' });
-        }
-      }
-
-      // Search streets
-      if (streetsIndex) {
-        for (const [key, entries] of streetsIndex) {
-          // For streets, if locality filter exists, check all entries for proximity
-          const matching = localityFilter ? entries.filter(e => nearLocality(e.lat, e.lon)) : [entries[0]];
-          if (matching.length === 0) continue;
-          const e = matching[0];
-          if (key === qNorm) exact.push({ ...e, source: 'street' });
-          else if (key.startsWith(qNorm)) starts.push({ ...e, source: 'street' });
-          else if (contains.length < 10 && key.includes(qNorm)) contains.push({ ...e, source: 'street' });
-        }
-      }
-
-      // If few exact/starts results, use fuzzy
-      if (exact.length + starts.length < 4 && q.length >= 3) {
-        const fuzzy = fuzzySearch(q, 10);
-        for (const f of fuzzy) {
-          // Find what type this name belongs to
-          const placeMatch = placesIndex?.get(f.name);
-          const cpMatch2 = textIndex?.get(f.name);
-          const streetMatch = streetsIndex?.get(f.name);
-          if (placeMatch) fuzzyResults.push({ ...placeMatch[0], source: 'place', fuzzy: true });
-          else if (cpMatch2) fuzzyResults.push({ ...cpMatch2[0], source: 'cp', fuzzy: true });
-          else if (streetMatch) fuzzyResults.push({ ...streetMatch[0], source: 'street', fuzzy: true });
-        }
-      }
-
-      // Deduplicate and merge
-      const seen = new Set();
-      for (const item of [...exact, ...starts, ...contains, ...fuzzyResults]) {
-        const key = item.type === 'street' ? `${item.street}|${item.localidade}` :
-                    item.type === 'cp' ? item.cp7 : `${item.name}|${item.lat}`;
-        if (!seen.has(key) && results.length < 12) {
-          seen.add(key);
-          results.push(item);
+    // Score CP7 entries
+    if (textIndex) {
+      for (const [normName, entries] of textIndex) {
+        const e = entries[0];
+        const searchText = normalizeStr(`${e.cp7} ${e.name} ${e.distrito} ${e.concelho} ${e.localidade}`);
+        const score = scoreEntry(tokens, searchText, cp4Token);
+        if (score > 0) {
+          scored.push({ item: { ...e, source: 'cp' }, score });
         }
       }
     }
 
-    renderResults(results, cpMatch ? 'cp' : 'text');
+    // Score places
+    if (placesIndex) {
+      for (const [normName, entries] of placesIndex) {
+        const e = entries[0];
+        const score = scoreEntry(tokens, normName, null);
+        if (score > 0) {
+          scored.push({ item: { ...e, source: 'place' }, score });
+        }
+      }
+    }
+
+    // Build context tokens: resolve place names and CP4 to coordinates
+    let contextLat = null, contextLon = null;
+    const textTokens = tokens.filter(t => !/^\d+$/.test(t));
+    
+    // Try to resolve context from non-street tokens (place names, CP4)
+    if (cp4Token && postalIndex) {
+      // Find centroid of CP4 area
+      for (const [cp7key, cpEntry] of postalIndex) {
+        if (cp7key.startsWith(cp4Token)) {
+          contextLat = cpEntry.lat; contextLon = cpEntry.lon;
+          break;
+        }
+      }
+    }
+    // Check if any token resolves to a known place (for geographic context)
+    if (!contextLat && textTokens.length > 0) {
+      // Try longest tokens first (more specific)
+      const sortedTokens = [...textTokens].sort((a, b) => b.length - a.length);
+      for (const tok of sortedTokens) {
+        if (tok.length < 3) continue;
+        // Exact match first, then startsWith
+        if (placesIndex) {
+          const exactPlace = placesIndex.get(tok);
+          if (exactPlace) { contextLat = exactPlace[0].lat; contextLon = exactPlace[0].lon; break; }
+          for (const [pName, pEntries] of placesIndex) {
+            if (pName.startsWith(tok) && tok.length >= 4) {
+              contextLat = pEntries[0].lat; contextLon = pEntries[0].lon; break;
+            }
+          }
+          if (contextLat) break;
+        }
+        if (!contextLat && textIndex) {
+          const exactCp = textIndex.get(tok);
+          if (exactCp) { contextLat = exactCp[0].lat; contextLon = exactCp[0].lon; break; }
+          for (const [cName, cEntries] of textIndex) {
+            if (cName.startsWith(tok) && tok.length >= 4) {
+              contextLat = cEntries[0].lat; contextLon = cEntries[0].lon; break;
+            }
+          }
+          if (contextLat) break;
+        }
+      }
+    }
+
+    // Score streets — with proximity bonus to resolved context
+    if (streetsIndex) {
+      for (const [normName, entries] of streetsIndex) {
+        const baseScore = scoreEntry(tokens, normName, null);
+        if (baseScore === 0) continue;
+        
+        let bestScore = baseScore;
+        let bestEntry = entries[0];
+        
+        // If we have context coords, find the street entry closest to context
+        if (contextLat && entries.length > 0) {
+          let minDist = Infinity;
+          for (const e of entries) {
+            const dlat = e.lat - contextLat, dlon = e.lon - contextLon;
+            const dist = dlat*dlat + dlon*dlon;
+            if (dist < minDist) {
+              minDist = dist;
+              bestEntry = e;
+            }
+          }
+          // Proximity bonus (closer = higher bonus)
+          if (minDist < 0.005) bestScore += 15; // <7km
+          else if (minDist < 0.02) bestScore += 8; // <15km
+          else if (minDist < 0.05) bestScore += 3; // <25km
+        }
+        
+        scored.push({ item: { ...bestEntry, source: 'street' }, score: bestScore });
+      }
+    }
+
+    // Sort by score descending
+    scored.sort((a, b) => b.score - a.score);
+
+    // Deduplicate and take top results
+    const results = [];
+    const seen = new Set();
+    for (const { item } of scored) {
+      const key = item.type === 'street' ? `${item.street}|${item.lat}` :
+                  item.type === 'cp' ? item.cp7 : `${item.name}|${item.lat}`;
+      if (!seen.has(key) && results.length < 12) {
+        seen.add(key);
+        results.push(item);
+      }
+    }
+
+    // If few results, try fuzzy
+    if (results.length < 4 && q.length >= 3) {
+      const fuzzy = fuzzySearch(q, 8);
+      for (const f of fuzzy) {
+        const pm = placesIndex?.get(f.name);
+        const cm = textIndex?.get(f.name);
+        const sm = streetsIndex?.get(f.name);
+        let item = null;
+        if (pm) item = { ...pm[0], source: 'place', fuzzy: true };
+        else if (cm) item = { ...cm[0], source: 'cp', fuzzy: true };
+        else if (sm) item = { ...sm[0], source: 'street', fuzzy: true };
+        if (item) {
+          const key = item.type === 'street' ? `${item.street}|${item.lat}` :
+                      item.type === 'cp' ? item.cp7 : `${item.name}|${item.lat}`;
+          if (!seen.has(key) && results.length < 12) {
+            seen.add(key);
+            results.push(item);
+          }
+        }
+      }
+    }
+
+    renderResults(results, 'text');
   }
 
   // Render
