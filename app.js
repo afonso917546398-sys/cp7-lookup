@@ -111,16 +111,37 @@
     placeMarker(lat, lon, item.type === 'cp' ? `${item.cp7} — ${item.name}` : name);
   }
 
+  // ─── Query normalizer ───────────────────────────
+  function normalizeQuery(q) {
+    let s = q.trim();
+    const abbrevs = [
+      [/\br\.?\s/gi, 'Rua '], [/\bav\.?\s/gi, 'Avenida '], [/\btrav\.?\s/gi, 'Travessa '],
+      [/\blg\.?\s/gi, 'Largo '], [/\blgo\.?\s/gi, 'Largo '], [/\bpc\.?\s/gi, 'Pra\u00e7a '],
+      [/\best\.?\s/gi, 'Estrada '], [/\bbc\.?\s/gi, 'Beco '], [/\bcc\.?\s/gi, 'Cal\u00e7ada '],
+      [/\burb\.?\s/gi, 'Urbaniza\u00e7\u00e3o '], [/\bqt\.?\s/gi, 'Quinta '],
+      [/\bsto\.?\s/gi, 'Santo '], [/\bsta\.?\s/gi, 'Santa '], [/\bs\.\s/gi, 'S\u00e3o '],
+      [/\bn\.?\s?s\.?\s?r?\.?a?\.?\s/gi, 'Nossa Senhora '],
+    ];
+    for (const [pat, rep] of abbrevs) s = s.replace(pat, rep);
+    return s.replace(/\s+/g, ' ').trim();
+  }
+
+  function simplifyQuery(q) {
+    const stop = new Set(['de','da','do','das','dos','e','a','o','as','os','na','no','nas','nos']);
+    return q.split(' ').filter(w => !stop.has(w.toLowerCase())).join(' ');
+  }
+
   // ─── Geocoder: Photon + Nominatim ────────────────────
   let geocodeController = null;
 
-  async function geocodeSearch(query) {
+  async function geocodeSearch(rawQuery) {
     if (geocodeController) geocodeController.abort();
     geocodeController = new AbortController();
     const signal = geocodeController.signal;
 
     searchStatus.textContent = 'A PESQUISAR...';
 
+    const query = normalizeQuery(rawQuery);
     const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=6&lang=pt&lat=39.5&lon=-8.2&location_bias_scale=5`;
     const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=pt&limit=6&addressdetails=1`;
 
@@ -169,6 +190,31 @@
             category: r.type?.toUpperCase() || 'LOCAL',
             distrito: a.state || '', concelho: a.county || '', localidade: a.city || a.town || a.village || a.hamlet || ''
           });
+        }
+      }
+
+      // Retry with simplified query if no results
+      if (results.length === 0) {
+        const simplified = simplifyQuery(query);
+        if (simplified !== query && simplified.length >= 3) {
+          searchStatus.textContent = 'A REFINAR...';
+          const retryUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(simplified)}&limit=6&lang=pt&lat=39.5&lon=-8.2&location_bias_scale=5`;
+          try {
+            const retryRes = await fetch(retryUrl, { signal }).then(r => r.json());
+            for (const f of (retryRes.features || [])) {
+              const p = f.properties || {};
+              const coords = f.geometry?.coordinates;
+              if (!coords || (p.country && p.country !== 'Portugal')) continue;
+              const name = [p.name, p.street].filter(Boolean).join(', ') || p.locality || p.city || 'Local';
+              const detail = [p.hamlet, p.village, p.town, p.city, p.county].filter(Boolean).slice(0, 3).join(', ');
+              results.push({
+                type: 'geocoded', name, detail,
+                lat: coords[1], lon: coords[0],
+                category: p.osm_value?.toUpperCase() || 'LOCAL',
+                distrito: p.state || '', concelho: p.county || '', localidade: p.city || p.town || p.village || p.hamlet || ''
+              });
+            }
+          } catch(e) {}
         }
       }
 
