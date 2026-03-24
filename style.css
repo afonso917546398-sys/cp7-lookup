@@ -21,18 +21,18 @@
   --transition: 150ms ease;
 }
 
-/* DARK THEME (default) */
+/* DARK THEME (default) — slate grey, not black */
 [data-theme="dark"] {
-  --bg: #0a0c10;
-  --panel-bg: #0f1218;
-  --surface: #161a22;
-  --surface-2: #1c2029;
-  --border: #252a35;
-  --border-focus: #3d6b5e;
-  --text: #c8ccd4;
-  --text-strong: #e8ebf0;
-  --text-muted: #6b7280;
-  --text-faint: #3d4350;
+  --bg: #1e2128;
+  --panel-bg: #252830;
+  --surface: #2c3039;
+  --surface-2: #343842;
+  --border: #3e434e;
+  --border-focus: #5a9e85;
+  --text: #d0d4dc;
+  --text-strong: #eceef2;
+  --text-muted: #848a96;
+  --text-faint: #555b67;
   --accent: #4ade80;
   --accent-dim: rgba(74, 222, 128, 0.1);
   --red: #ef4444;
@@ -391,6 +391,11 @@ body {
 
 .credits a:hover { color: var(--text-muted); }
 .credits .sep { opacity: 0.3; margin: 0 var(--space-1); }
+
+/* Lighten dark map tiles */
+.map-dark-tiles {
+  filter: brightness(1.4) contrast(0.9);
+}
 
 /* Leaflet overrides */
 .leaflet-control-zoom a {
