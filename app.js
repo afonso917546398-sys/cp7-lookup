@@ -83,7 +83,7 @@
     });
     currentMarker = L.marker([lat, lon], { icon }).addTo(map);
     currentMarker.bindTooltip(label, { permanent: true, direction: 'top', offset: [0,-8], className: 'cp-tooltip' });
-    map.flyTo([lat, lon], 15, { duration: 0.8 });
+    map.flyTo([lat, lon], 17, { duration: 0.8 });
   }
 
   // ─── Show result card ─────────────────────────────────
