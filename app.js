@@ -422,4 +422,9 @@
     copyToClipboard(document.getElementById('resultCoords').textContent);
   });
 
+  // ─── Version date ─────────────────────────────────────
+  fetch('./version.json').then(r => r.json()).then(v => {
+    if (v.date) document.getElementById('updateDate').textContent = `CP7 ${v.date}`;
+  }).catch(() => {});
+
 })();
