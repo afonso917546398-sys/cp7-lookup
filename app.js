@@ -17,6 +17,14 @@
   themeBtn.addEventListener('click', () => {
     currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', currentTheme);
+    // Swap map tiles
+    if (currentTheme === 'dark') {
+      map.removeLayer(tileLight);
+      tileDark.addTo(map);
+    } else {
+      map.removeLayer(tileDark);
+      tileLight.addTo(map);
+    }
   });
 
   // ─── CP7 data (offline) ───────────────────────────────
@@ -48,9 +56,16 @@
 
   // ─── Map ──────────────────────────────────────────────
   const map = L.map('map', { center: [39.7, -8.2], zoom: 7, zoomControl: true });
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+
+  const tileDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 19
-  }).addTo(map);
+  });
+  const tileLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 19
+  });
+
+  // Start with dark
+  tileDark.addTo(map);
 
   let currentMarker = null, currentCircle = null;
 
