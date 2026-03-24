@@ -274,10 +274,15 @@
   }
 
   // ─── Input handling ───────────────────────────────────
+  let lastInputValue = '';
   searchInput.addEventListener('input', () => {
-    clearBtn.classList.toggle('visible', searchInput.value.length > 0);
+    const val = searchInput.value;
+    clearBtn.classList.toggle('visible', val.length > 0);
+    // Skip if value hasn't changed (arrow keys, etc.)
+    if (val === lastInputValue) return;
+    lastInputValue = val;
     clearTimeout(searchTimeout);
-    const q = searchInput.value.trim();
+    const q = val.trim();
     // CP7 patterns: instant, no debounce
     if (/^\d{4}[-\s]?\d{0,3}$/.test(q)) {
       search(q);
@@ -290,6 +295,7 @@
   searchInput.addEventListener('keydown', (e) => {
     const items = searchResults.querySelectorAll('li');
     if (!items.length && e.key !== 'Escape') return;
+    if (!['ArrowDown','ArrowUp','Enter','Escape'].includes(e.key)) return;
     const current = searchResults.querySelector('li.active');
     let idx = Array.from(items).indexOf(current);
 
