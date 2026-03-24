@@ -240,6 +240,24 @@
       return;
     }
 
+    // Check if GPS coordinates (e.g. "39.74, -8.77" or "39.74 -8.77" or "39,74 -8,77")
+    const coordMatch = q.match(/^\s*(-?\d{1,3}[.,]\d{2,})\s*[,;\s]\s*(-?\d{1,3}[.,]\d{2,})\s*$/);
+    if (coordMatch) {
+      const lat = parseFloat(coordMatch[1].replace(',', '.'));
+      const lon = parseFloat(coordMatch[2].replace(',', '.'));
+      if (lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+        searchStatus.textContent = 'COORDENADAS GPS';
+        const item = {
+          type: 'geocoded', name: `${lat.toFixed(5)}, ${lon.toFixed(5)}`,
+          detail: '', lat, lon, category: 'COORDENADAS GPS',
+          distrito: '', concelho: '', localidade: ''
+        };
+        showResult(item);
+        searchResults.innerHTML = '';
+        return;
+      }
+    }
+
     // Check if CP7 or CP4 pattern
     const cpMatch = q.match(/^(\d{4})(?:[-\s]?(\d{0,3}))?$/);
     if (cpMatch) {
@@ -329,8 +347,8 @@
     lastInputValue = val;
     clearTimeout(searchTimeout);
     const q = val.trim();
-    // CP7 patterns: instant, no debounce
-    if (/^\d{4}[-\s]?\d{0,3}$/.test(q)) {
+    // CP7 or coordinates: instant, no debounce
+    if (/^\d{4}[-\s]?\d{0,3}$/.test(q) || /^-?\d{1,3}[.,]\d{2,}\s*[,;\s]\s*-?\d{1,3}[.,]\d{2,}$/.test(q)) {
       search(q);
     } else {
       searchTimeout = setTimeout(() => search(q), 250);
