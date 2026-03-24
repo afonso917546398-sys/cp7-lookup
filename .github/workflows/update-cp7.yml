@@ -1,0 +1,90 @@
+name: Update CP7 Database
+
+on:
+  schedule:
+    # Quarterly: 1st of January, April, July, October at 06:00 UTC
+    - cron: '0 6 1 1,4,7,10 *'
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Download and process CP7 data
+        run: |
+          echo "Downloading CP7 data from temospena/CP7..."
+          curl -L -o cp7_raw.txt "https://raw.githubusercontent.com/temospena/CP7/master/CP7%20Portugal/CP7_Portugal_nov2022.txt" --max-time 120
+
+          echo "Processing..."
+          python3 << 'PYEOF'
+          import csv, gzip
+
+          def js_escape(s):
+              return s.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '').replace('\r', '').replace('|', ' ')
+
+          cp7_data = {}
+          with open('cp7_raw.txt', 'r', encoding='utf-8') as f:
+              reader = csv.DictReader(f, delimiter='\t', quotechar='"')
+              for row in reader:
+                  cp7 = row.get('CP7', '').strip().strip('"')
+                  lat = row.get('Lat', '').strip().strip('"')
+                  lon = row.get('Long', '').strip().strip('"')
+                  cp_alfa = row.get('CPAlfa', '').strip().strip('"')
+                  distrito = row.get('Distrito', '').strip().strip('"')
+                  concelho = row.get('Concelho', '').strip().strip('"')
+                  localidade = row.get('Localidade', '').strip().strip('"')
+                  if not cp7 or cp7 == 'NA': continue
+                  try: lat_f = float(lat); lon_f = float(lon)
+                  except: continue
+                  if cp7 not in cp7_data:
+                      cp7_data[cp7] = {'lat': round(lat_f, 5), 'lon': round(lon_f, 5),
+                          'name': cp_alfa, 'distrito': distrito, 'concelho': concelho,
+                          'localidade': localidade}
+
+          sorted_cps = sorted(cp7_data.keys())
+          lines = []
+          for cp in sorted_cps:
+              d = cp7_data[cp]
+              lines.append(f"{cp}|{js_escape(d['name'])}|{d['lat']}|{d['lon']}|{js_escape(d['distrito'])}|{js_escape(d['concelho'])}|{js_escape(d['localidade'])}")
+
+          blob = '\\n'.join(lines)
+          js = f'const POSTAL_DATA = "{blob}";\n'
+
+          with open('postal_data.js', 'w', encoding='utf-8') as f:
+              f.write(js)
+
+          print(f"Generated postal_data.js: {len(sorted_cps)} CP7 entries")
+          PYEOF
+
+          rm cp7_raw.txt
+
+      - name: Check for changes
+        id: check
+        run: |
+          if git diff --quiet postal_data.js; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No changes detected"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Changes detected!"
+          fi
+
+      - name: Commit and push
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add postal_data.js
+          git commit -m "chore: auto-update CP7 database ($(date +%Y-%m-%d))"
+          git push
